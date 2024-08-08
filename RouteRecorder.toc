@@ -1,0 +1,16 @@
+## Interface: 110002, 110000
+## Title: RouteRecorder
+## Author: Kemayo
+## Notes: Record a route
+## Version: @project-version@
+## IconTexture: Interface\Icons\Ability_Spy
+## LoadOnDemand: 0
+## OptionalDeps: LibDBIcon-1.0
+## X-Curse-Project-ID: 
+## X-Wago-ID: 
+
+## SavedVariables: RouteRecorderDB
+
+## AddonCompartmentFunc: RouteRecorder_OnAddonCompartmentClick
+
+addon.lua
