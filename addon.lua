@@ -38,6 +38,8 @@ ns:RegisterCallback("ADDON_LOADED", function(self, event, name)
 
     _G[myname.."DB"] = setmetatable(_G[myname.."DB"] or {}, {
         __index = {
+            threshold = 10,
+            interval = 1,
             -- routes = {},
         },
     })
@@ -60,13 +62,13 @@ end
 function ns:StartRoute(threshold)
     -- print("StartRoute", threshold)
     -- threshold in yards
-    local thresholdSq = (threshold or 10) ^ 2
+    local thresholdSq = (threshold or db.threshold) ^ 2
 
     local position, mapID = self:GetPosition()
     ns.route = {mapID = mapID, start = time()}
     local zw, zh = ns:GetZoneSize(mapID)
     table.insert(ns.route, position)
-    ns.ticker = C_Timer.NewTicker(1, function(ticker)
+    ns.ticker = C_Timer.NewTicker(db.interval, function(ticker)
         local newposition = self:GetPosition()
         local distanceSq = CalculateDistanceSq(position.x * zw, position.y * zh, newposition.x * zw, newposition.y * zh)
         -- print("Moved since last:", math.sqrt(distance))
@@ -141,6 +143,36 @@ _G.RouteRecorder_OnAddonCompartmentClick = function(addon, button, ...)
             ns:StartRoute()
         end
     elseif button == "RightButton" then
+        local function makeRadios(key, description, ...)
+            local isSelected = function(val) return db[key] == val end
+            local setSelected = function(val)
+                db[key] = val
+                return MenuResponse.Close
+            end
+            for i=1, select("#", ...) do
+                local radio = select(i, ...) -- {text, value}
+                description:CreateRadio(radio[1], isSelected, setSelected, radio[2])
+            end
+        end
+        MenuUtil.CreateContextMenu(nil, function(owner, rootDescription)
+            rootDescription:SetTag("MENU_RANGERECORDER_CONTEXT")
+            rootDescription:CreateTitle(myfullname)
+            makeRadios("threshold",
+                rootDescription:CreateButton("Threshold"),
+                {"5 yards", 5},
+                {"10 yards", 10},
+                {"25 yards", 25},
+                {"40 yards", 40}
+            )
+            makeRadios("interval",
+                rootDescription:CreateButton("Interval"),
+                {"0.5 seconds", 0.5},
+                {"1.0 seconds", 1},
+                {"1.5 seconds", 1.5},
+                {"2.0 seconds", 2},
+                {"5.0 seconds", 5}
+            )
+        end)
     end
 end
 
