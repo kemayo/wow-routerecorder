@@ -53,23 +53,19 @@ function ns:PLAYER_LOGIN()
     self:UnregisterCallback("PLAYER_LOGIN")
 end
 
-function ns:GetPosition()
-    local mapID = C_Map.GetBestMapForUnit("player")
-    local position = C_Map.GetPlayerMapPosition(mapID, "player")
-    return position, mapID
-end
-
 function ns:StartRoute(threshold)
     -- print("StartRoute", threshold)
     -- threshold in yards
     local thresholdSq = (threshold or db.threshold) ^ 2
 
-    local position, mapID = self:GetPosition()
+    local mapID = C_Map.GetBestMapForUnit("player")
+    local position = C_Map.GetPlayerMapPosition(mapID, "player")
     ns.route = {mapID = mapID, start = time()}
     local zw, zh = ns:GetZoneSize(mapID)
     table.insert(ns.route, position)
     ns.ticker = C_Timer.NewTicker(db.interval, function(ticker)
-        local newposition = self:GetPosition()
+        -- always on the starting mapID
+        local newposition = C_Map.GetPlayerMapPosition(mapID, "player")
         local distanceSq = CalculateDistanceSq(position.x * zw, position.y * zh, newposition.x * zw, newposition.y * zh)
         -- print("Moved since last:", math.sqrt(distance))
         if distanceSq > thresholdSq then
@@ -78,10 +74,24 @@ function ns:StartRoute(threshold)
             -- print("Logged", position:GetXY())
         end
     end)
-    ns:RegisterCallback("ZONE_CHANGED_NEW_AREA", self.StopRoute)
+    self:RegisterCallback("ZONE_CHANGED_NEW_AREA", function(...)
+        if self:StopRouteIfOutOfBounds() then
+            self:UnregisterCallback("ZONE_CHANGED_NEW_AREA")
+        end
+    end)
+end
+
+function ns:StopRouteIfOutOfBounds()
+    if not ns.route then return end
+    local position = C_Map.GetPlayerMapPosition(ns.route.mapID, "player")
+    if not (position and self:PositionIsWithinBounds(position)) then
+        self:StopRoute()
+        return true
+    end
 end
 
 function ns:StopRoute(...)
+    if not ns.ticker then return end
     ns.ticker = ns.ticker:Cancel()
 
     local route = ns.route
@@ -100,6 +110,14 @@ function ns:StopRoute(...)
     print("Finished route", #route, "points; ", distance, "yards traveled;", route.stop - route.start, "seconds")
 
     StaticPopup_Show("ROUTERECORDER_COPYBOX", nil, nil, string.join(", ", unpack(out)))
+end
+
+function ns:PositionIsWithinBounds(position)
+    local x, y = position:GetXY()
+    if not (x and y) or not (WithinRange(x, 0, 1) and WithinRange(y, 0, 1)) then
+        return false
+    end
+    return true
 end
 
 do
