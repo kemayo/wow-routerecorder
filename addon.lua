@@ -69,6 +69,7 @@ function ns:StartRoute(threshold)
         local distanceSq = CalculateDistanceSq(position.x * zw, position.y * zh, newposition.x * zw, newposition.y * zh)
         -- print("Moved since last:", math.sqrt(distance))
         if distanceSq > thresholdSq then
+            -- TODO: detect if the previous point is on a straight line between the new point and previous-1, and remove it?
             table.insert(ns.route, newposition)
             position = newposition
             -- print("Logged", position:GetXY())
