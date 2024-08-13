@@ -91,10 +91,10 @@ function ns:StopRouteIfOutOfBounds()
 end
 
 function ns:StopRoute(...)
-    if not ns.ticker then return end
+    if not self.ticker then return end
     ns.ticker = ns.ticker:Cancel()
 
-    local route = ns.route
+    local route = self.route
     route.stop = time()
     ns.route = nil
 
@@ -107,9 +107,8 @@ function ns:StopRoute(...)
         end
         table.insert(out, self:GetCoord(position:GetXY()))
     end
-    print("Finished route", #route, "points; ", distance, "yards traveled;", route.stop - route.start, "seconds")
-
-    StaticPopup_Show("ROUTERECORDER_COPYBOX", nil, nil, string.join(", ", unpack(out)))
+    self:ShowTextToCopy(("%d points; %d yards traveled; %d seconds"):format(#route, distance, route.stop - route.start))
+    self:ShowTextToCopy(unpack(out))
 end
 
 function ns:PositionIsWithinBounds(position)
@@ -194,24 +193,14 @@ _G.RouteRecorder_OnAddonCompartmentClick = function(addon, button, ...)
     end
 end
 
-StaticPopupDialogs["ROUTERECORDER_COPYBOX"] = {
-    text = "Copy me",
-    hasEditBox = true,
-    hideOnEscape = true,
-    whileDead = true,
-    closeButton = true,
-    editBoxWidth = 350,
-    EditBoxOnEscapePressed = function(self)
-        self:GetParent():Hide()
-    end,
-    button1 = "Done",
-    OnButton1 = function(self, data)
-        return false
-    end,
-    OnShow = function(self, data)
-        if data then
-            self.editBox:SetText(data)
-            self.editBox:HighlightText()
+do
+    local window
+    function ns:ShowTextToCopy(...)
+        local TextDump = LibStub("LibTextDump-1.0")
+        if not window then
+            window = TextDump:New(myname, 420, 180)
         end
-    end,
-}
+        window:AddLine(string.join(', ', tostringall(...)))
+        window:Display()
+    end
+end

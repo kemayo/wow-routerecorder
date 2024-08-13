@@ -5,12 +5,12 @@
 ## Version: @project-version@
 ## IconTexture: Interface\Icons\Ability_Spy
 ## LoadOnDemand: 0
-## OptionalDeps: LibDBIcon-1.0
-## X-Curse-Project-ID: 
-## X-Wago-ID: 
+## OptionalDeps: LibTextDump-1.0
 
 ## SavedVariables: RouteRecorderDB
 
 ## AddonCompartmentFunc: RouteRecorder_OnAddonCompartmentClick
+
+embeds.xml
 
 addon.lua
