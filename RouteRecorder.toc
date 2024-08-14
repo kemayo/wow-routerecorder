@@ -5,7 +5,7 @@
 ## Version: @project-version@
 ## IconTexture: Interface\Icons\Ability_Spy
 ## LoadOnDemand: 0
-## OptionalDeps: LibTextDump-1.0
+## OptionalDeps: LibTextDump-1.0, HereBeDragons
 ## X-Curse-Project-ID: 1083507
 
 ## SavedVariables: RouteRecorderDB
@@ -15,3 +15,4 @@
 embeds.xml
 
 addon.lua
+map.lua
