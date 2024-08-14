@@ -4,4 +4,6 @@ WoW developer tool for recording a route that your character follows. Every seco
 
 Click the icon in the addon compartment to start recording. Click again to stop. Right-click for some options about the route.
 
+Routes from the current session will appear on your world map.
+
 I use this to work on my HandyNotes plugins, because eyeballing coordinates on the world map is a pain.
