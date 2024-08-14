@@ -101,15 +101,39 @@ function ns:StopRoute(...)
 
     local zw, zh = ns:GetZoneSize(route.mapID)
     local distance = 0
-    local out = {}
+    local raw = {}
+    local straight = {}
     for i, position in ipairs(route) do
+        -- Every coordinate gets logged:
+        table.insert(raw, self:GetCoord(position:GetXY()))
+        -- add the travel distance:
         if route[i - 1] then
-            distance = distance + CalculateDistance(route[i - 1].x * zw, route[i - 1].y * zh, position.x * zw, position.y * zh)
+            -- distance = distance + CalculateDistance(route[i - 1].x * zw, route[i - 1].y * zh, position.x * zw, position.y * zh)
+            distance = distance + self:CalculateDistance(route[i - 1], position, zw, zh)
         end
-        table.insert(out, self:GetCoord(position:GetXY()))
+        -- Now, work out whether this was superfluous:
+        if i == 1 or i == #route then
+            -- First and last coords always get added
+            table.insert(straight, self:GetCoord(position:GetXY()))
+        elseif route[i - 1] and route[i + 1] then
+            -- Is this point on a straight line between the point before and after it?
+            -- Check whether the distance <a to b> + <b to c> is about the same as <a to c>
+            local routedistance = self:CalculateDistance(position, route[i - 1]) + self:CalculateDistance(position, route[i + 1])
+            local straightdistance = self:CalculateDistance(route[i - 1], route[i + 1])
+            -- Third arg to ApproximatelyEqual is the tuning factor for the curve, and is
+            -- how far the distances are allowed to deviate while still being "equal".
+            -- Worst-case for this is long slow gentle curves, which will be entirely smoothed
+            -- into a straight line. Fixing this would involve doing something more
+            -- complicated.
+            -- (This is coord-scaled, so 0-1 as percent-of-zone; MathUtil.Epsilon is .000001, which is too small)
+            if not ApproximatelyEqual(routedistance, straightdistance, 0.0001) then
+                table.insert(straight, self:GetCoord(position:GetXY()))
+            end
+        end
     end
     self:ShowTextToCopy(("%d points; %d yards traveled; %d seconds"):format(#route, distance, route.stop - route.start))
-    self:ShowTextToCopy(unpack(out))
+    self:ShowTextToCopy("Raw coords", unpack(raw))
+    self:ShowTextToCopy("Straightened coords", unpack(straight))
 end
 
 function ns:PositionIsWithinBounds(position)
@@ -118,6 +142,14 @@ function ns:PositionIsWithinBounds(position)
         return false
     end
     return true
+end
+
+function ns:CalculateDistance(position1, position2, scalex, scaley)
+    scalex, scaley = scalex or 1, scaley or 1
+    return CalculateDistance(
+        position1.x * scalex, position1.y * scaley,
+        position2.x * scalex, position2.y * scaley
+    )
 end
 
 do
