@@ -105,47 +105,12 @@ function ns:StopRoute(...)
 
     local route = self.route
     route.stop = time()
-    route.straight = {}
+    route.straight = self:StraightenRoute(route.raw)
     ns.route = nil
 
-    local zw, zh = ns:GetZoneSize(route.mapID)
-    local distance = 0
-    for i, position in ipairs(route.raw) do
-        -- Every coordinate gets logged:
-        -- table.insert(raw, self:GetCoord(position:GetXY()))
-        -- add the travel distance:
-        if route.raw[i - 1] then
-            -- distance = distance + CalculateDistance(route[i - 1].x * zw, route[i - 1].y * zh, position.x * zw, position.y * zh)
-            distance = distance + self:CalculateDistance(route.raw[i - 1], position, zw, zh)
-        end
-        -- Now, work out whether this was superfluous:
-        if i == 1 or i == #route.raw then
-            -- First and last coords always get added
-            table.insert(route.straight, position)
-        elseif route.raw[i - 1] and route.raw[i + 1] then
-            -- Is this point on a straight line between the point before and after it?
-            -- Check whether the distance <a to b> + <b to c> is about the same as <a to c>
-            local routedistance = self:CalculateDistance(position, route.raw[i - 1]) + self:CalculateDistance(position, route.raw[i + 1])
-            local straightdistance = self:CalculateDistance(route.raw[i - 1], route.raw[i + 1])
-            -- Third arg to ApproximatelyEqual is the tuning factor for the curve, and is
-            -- how far the distances are allowed to deviate while still being "equal".
-            -- Worst-case for this is long slow gentle curves, which will be entirely smoothed
-            -- into a straight line. Fixing this would involve doing something more
-            -- complicated.
-            -- (This is coord-scaled, so 0-1 as percent-of-zone; MathUtil.Epsilon is .000001, which is too small)
-            if not ApproximatelyEqual(routedistance, straightdistance, 0.0001) then
-                table.insert(route.straight, position)
-            end
-        end
-    end
-    local function coordify(position)
-        return ns:GetCoord(position:GetXY())
-    end
-    self:ShowTextToCopy(("%d (%d) points; %d yards traveled; %d seconds"):format(#route.straight, #route.raw, distance, route.stop - route.start))
-    self:ShowTextToCopy("Raw coords", unpack(TableUtil.Transform(route.raw, coordify)))
-    self:ShowTextToCopy("Straightened coords", unpack(TableUtil.Transform(route.straight, coordify)))
-
     table.insert(ns.routes, route)
+
+    self:ShowRouteToCopy(route)
 
     ns.RouteWorldMapDataProvider:RefreshAllData()
 end
@@ -164,6 +129,74 @@ function ns:CalculateDistance(position1, position2, scalex, scaley)
         position1.x * scalex, position1.y * scaley,
         position2.x * scalex, position2.y * scaley
     )
+end
+
+function ns:MeasureRoute(route, mapID)
+    -- The route will be measured in zone-heights if no mapID is provided
+    local zw, zh = 1.5, 1
+    if mapID then
+        -- With a mapID, this will return yards
+        zw, zh = self:GetZoneSize(mapID)
+    end
+    local distance = 0
+    for i, position in ipairs(route) do
+        if route[i - 1] then
+            distance = distance + self:CalculateDistance(route[i - 1], position, zw, zh)
+        end
+    end
+    return distance
+end
+
+function ns:StraightenRoute(raw, epsilon)
+    local straight = {}
+    for i, position in ipairs(raw) do
+        -- Now, work out whether this was superfluous:
+        if i == 1 or i == #raw then
+            -- First and last coords always get added
+            table.insert(straight, position)
+        elseif raw[i - 1] and raw[i + 1] then
+            -- Is this point on a straight line between the point before and after it?
+            -- Check whether the distance <a to b> + <b to c> is about the same as <a to c>
+            local routedistance = self:CalculateDistance(position, raw[i - 1]) + self:CalculateDistance(position, raw[i + 1])
+            local straightdistance = self:CalculateDistance(raw[i - 1], raw[i + 1])
+            -- Third arg to ApproximatelyEqual is the tuning factor for the curve, and is
+            -- how far the distances are allowed to deviate while still being "equal".
+            -- Worst-case for this is long slow gentle curves, which will be entirely smoothed
+            -- into a straight line. Fixing this would involve doing something more
+            -- complicated.
+            -- (This is coord-scaled, so 0-1 as percent-of-zone; MathUtil.Epsilon is .000001, which is too small)
+            if not ApproximatelyEqual(routedistance, straightdistance, epsilon or 0.00001) then
+                table.insert(straight, position)
+            end
+        end
+    end
+    return straight
+end
+
+function ns:ShowRouteToCopy(route)
+    local function coordify(position)
+        return self:GetCoord(position:GetXY())
+    end
+    self:ShowTextToCopy(("%d (%d) points; %d yards traveled; %d seconds"):format(#route.straight, #route.raw, self:MeasureRoute(route.raw, route.mapID), route.stop - route.start))
+    self:ShowTextToCopy("Raw coords", unpack(TableUtil.Transform(route.raw, coordify)))
+    self:ShowTextToCopy("Straightened coords", unpack(TableUtil.Transform(route.straight, coordify)))
+end
+
+_G.RouteRecorder_Straighten = function(coords, epsilon)
+    local raw = TableUtil.Transform(coords, function(coord)
+        return CreateVector2D(ns:GetXY(coord))
+    end)
+    local straight = ns:StraightenRoute(raw, epsilon)
+    local route = {
+        raw = raw,
+        straight = straight,
+        start = time(),
+        stop = time(),
+        mapID = C_Map.GetBestMapForUnit("player"),
+    }
+    ns:ShowRouteToCopy(route)
+    table.insert(ns.routes, route)
+    ns.RouteWorldMapDataProvider:RefreshAllData()
 end
 
 do
