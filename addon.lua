@@ -35,6 +35,8 @@ function ns:TriggerEvent(...)
     return Callbacks:TriggerEvent(...)
 end
 
+local db
+
 ns:RegisterCallback("ADDON_LOADED", function(self, event, name)
     if name ~= myname then return end
 
