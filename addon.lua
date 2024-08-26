@@ -198,7 +198,7 @@ function ns:GetXY(coord)
     return floor(coord / 10000) / 10000, (coord % 10000) / 10000
 end
 
-function ns:ShowConfigMenu()
+function ns:ShowConfigMenu(route)
     local function makeRadios(key, description, ...)
         local isSelected = function(val) return db[key] == val end
         local setSelected = function(val)
@@ -220,6 +220,14 @@ function ns:ShowConfigMenu()
     MenuUtil.CreateContextMenu(nil, function(owner, rootDescription)
         rootDescription:SetTag("MENU_RANGERECORDER_CONTEXT")
         rootDescription:CreateTitle(myfullname)
+
+        if route then
+            rootDescription:CreateButton("Delete Route", function()
+                tDeleteItem(ns.routes, route)
+                ns.RouteWorldMapDataProvider:RefreshAllData()
+            end)
+            rootDescription:CreateDivider()
+        end
 
         local map = rootDescription:CreateButton("On map...")
         map:CreateCheckbox("Raw points", checkIsSelected, checkSetSelected, "map_raw")

@@ -63,18 +63,18 @@ local COLORS = {
 }
 function RouteWorldMapDataProvider:DrawRoute(route, uiMapID)
     if ns.db.map_raw then
-        self:DrawPath(route.raw, uiMapID, "raw")
+        self:DrawPath(route.raw, uiMapID, "raw", route)
     end
     if ns.db.map_straight then
-        self:DrawPath(route.straight, uiMapID, "straight")
+        self:DrawPath(route.straight, uiMapID, "straight", route)
     end
 end
 
 local pins = {}
-function RouteWorldMapDataProvider:DrawPath(path, uiMapID, variant)
+function RouteWorldMapDataProvider:DrawPath(path, uiMapID, variant, route)
     for _, node in ipairs(path) do
         local x, y = node:GetXY()
-        local pin = self:AcquirePin(variant, COLORS[variant])
+        local pin = self:AcquirePin(variant, COLORS[variant], route)
         pin:SetPosition(x, y)
         pin:Show()
         if pins[#pins] then
@@ -105,7 +105,8 @@ function RoutePinMixin:OnLoad()
     self.texture:SetAllPoints()
 end
 
-function RoutePinMixin:OnAcquired(variant, color)
+function RoutePinMixin:OnAcquired(variant, color, route)
+    self.route = route
     self.variant = variant
     self.texture:SetVertexColor(color.r, color.g, color.b, color.a or 1)
 end
@@ -118,6 +119,7 @@ function RoutePinMixin:OnMouseEnter()
     end
     local color = COLORS[self.variant]
     GameTooltip:AddDoubleLine("Route", self.variant, 1, 1, 1, color.r, color.g, color.b)
+    GameTooltip:AddDoubleLine(" ", ("%d points"):format(#self.route[self.variant]))
     GameTooltip:AddDoubleLine(" ", ns:GetCoord(self.normalizedX, self.normalizedY))
     GameTooltip:Show()
 end
@@ -128,7 +130,7 @@ end
 
 function RoutePinMixin:OnMouseUp(button)
     if button == "RightButton" then
-        ns:ShowConfigMenu()
+        ns:ShowConfigMenu(self.route)
     end
 end
 
