@@ -269,7 +269,7 @@ do
     function ns:ShowTextToCopy(...)
         local TextDump = LibStub("LibTextDump-1.0")
         if not window then
-            window = TextDump:New(myname, 420, 180)
+            window = TextDump:New(myname, 420, 280)
         end
         window:AddLine(string.join(', ', tostringall(...)))
         window:Display()
