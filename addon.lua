@@ -1,6 +1,8 @@
 local myname, ns = ...
 local myfullname = C_AddOns.GetAddOnMetadata(myname, "Title")
 
+ns.DEFAULT_EPSILON = 0.00002
+
 ns.CLASSIC = WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE
 
 local Callbacks = CreateFrame("EventFrame")
@@ -90,6 +92,7 @@ function ns:StartRoute(threshold)
             self:UnregisterCallback("ZONE_CHANGED_NEW_AREA")
         end
     end)
+    self:TriggerEvent("OnRouteStarted", ns.route)
 end
 
 function ns:StopRouteIfOutOfBounds()
@@ -107,14 +110,15 @@ function ns:StopRoute(...)
 
     local route = self.route
     route.stop = time()
-    route.straight = self:StraightenRoute(route.raw)
+    route.straight = self:StraightenRoute(route.raw, ns.DEFAULT_EPSILON)
+    route.epsilon = ns.DEFAULT_EPSILON
     ns.route = nil
 
     table.insert(ns.routes, route)
 
-    self:ShowRouteToCopy(route)
-
     ns.RouteWorldMapDataProvider:RefreshAllData()
+
+    self:TriggerEvent("OnRouteStopped", route)
 end
 
 function ns:PositionIsWithinBounds(position)
@@ -167,7 +171,7 @@ function ns:StraightenRoute(raw, epsilon)
             -- into a straight line. Fixing this would involve doing something more
             -- complicated.
             -- (This is coord-scaled, so 0-1 as percent-of-zone; MathUtil.Epsilon is .000001, which is too small)
-            if not ApproximatelyEqual(routedistance, straightdistance, epsilon or 0.00001) then
+            if not ApproximatelyEqual(routedistance, straightdistance, epsilon or ns.DEFAULT_EPSILON) then
                 table.insert(straight, position)
             end
         end
@@ -179,6 +183,7 @@ function ns:ShowRouteToCopy(route)
     local function coordify(position)
         return self:GetCoord(position:GetXY())
     end
+    self:ClearText()
     self:ShowTextToCopy(("%d (%d) points; %d yards traveled; %d seconds"):format(#route.straight, #route.raw, self:MeasureRoute(route.raw, route.mapID), route.stop - route.start))
     self:ShowTextToCopy("Raw coords", unpack(TableUtil.Transform(route.raw, coordify)))
     self:ShowTextToCopy("Straightened coords", unpack(TableUtil.Transform(route.straight, coordify)))
@@ -192,6 +197,7 @@ _G.RouteRecorder_Straighten = function(coords, epsilon)
     local route = {
         raw = raw,
         straight = straight,
+        epsilon = epsilon,
         start = time(),
         stop = time(),
         mapID = C_Map.GetBestMapForUnit("player"),
@@ -231,6 +237,25 @@ end
 
 function ns:GetXY(coord)
     return floor(coord / 10000) / 10000, (coord % 10000) / 10000
+end
+
+-- These are tiny numbers, and I want them represented well
+function ns.epsilonToString(x)
+    -- shortest %g that still round-trips back to the same float
+    -- (%g is "use whichever is shortest: %f or %e")
+    local s
+    for prec = 1, 17 do
+        s = string.format("%." .. prec .. "g", x)
+        if tonumber(s) == x then break end
+    end
+
+    local mant, exp = s:match("^(.-)[eE]([-+]?%d+)$")
+    if mant then
+        local sig = #(mant:gsub("[-.]", ""))          -- significant digits
+        local dec = math.max(sig - 1 - tonumber(exp), 0)  -- decimals needed
+        s = string.format("%." .. dec .. "f", x)
+    end
+    return s
 end
 
 function ns:ShowConfigMenu(route)
@@ -289,24 +314,25 @@ end
 _G.RouteRecorder_OnAddonCompartmentClick = function(addon, button, ...)
     -- DevTools_Dump({addon, button, ...})
     if button == "LeftButton" then
-        if ns.ticker then
-            ns:StopRoute()
-        else
-            ns:StartRoute()
-        end
+        ns:ToggleWindow()
     elseif button == "RightButton" then
         ns:ShowConfigMenu()
     end
 end
 
 do
+    local TextDump = LibStub("LibTextDump-1.0", true)
+    if not TextDump then return end
     local window
     function ns:ShowTextToCopy(...)
-        local TextDump = LibStub("LibTextDump-1.0")
         if not window then
             window = TextDump:New(myname, 420, 280)
         end
         window:AddLine(string.join(', ', tostringall(...)))
         window:Display()
+    end
+    function ns:ClearText()
+        if not window then return end
+        window:Clear()
     end
 end
