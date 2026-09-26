@@ -60,6 +60,7 @@ end
 local COLORS = {
     raw = {r=1, g=0, b=0},
     straight = {r=0, g=1, b=1},
+    loop = {r=1, g=0.5, b=0},
 }
 function RouteWorldMapDataProvider:DrawRoute(route, uiMapID)
     if ns.db.map_raw then
@@ -68,13 +69,25 @@ function RouteWorldMapDataProvider:DrawRoute(route, uiMapID)
     if ns.db.map_straight then
         self:DrawPath(route.straight, uiMapID, "straight", route)
     end
+    if ns.db.map_loops and route.loops then
+        -- The laps that would be cut; the kept lap is under them in the straightened route
+        for _, loop in ipairs(route.loops) do
+            if not loop.removed then
+                for lap = 1, #loop.laps - 1 do
+                    if lap ~= loop.keep then
+                        self:DrawPath(ns:GetLapPath(route, loop, lap), uiMapID, "loop", route, loop, lap)
+                    end
+                end
+            end
+        end
+    end
 end
 
 local pins = {}
-function RouteWorldMapDataProvider:DrawPath(path, uiMapID, variant, route)
+function RouteWorldMapDataProvider:DrawPath(path, uiMapID, variant, route, loop, lap)
     for _, node in ipairs(path) do
         local x, y = node:GetXY()
-        local pin = self:AcquirePin(variant, COLORS[variant], route)
+        local pin = self:AcquirePin(variant, COLORS[variant], route, path, loop, lap)
         pin:SetPosition(x, y)
         pin:Show()
         if pins[#pins] then
@@ -93,8 +106,6 @@ function RouteWorldMapDataProvider:ConnectPins(pin1, pin2, color)
 end
 
 function RoutePinMixin:OnLoad()
-    -- This is below normal handynotes pins
-    self:UseFrameLevelType(ns.CLASSIC and "PIN_FRAME_LEVEL_MAP_LINK" or "PIN_FRAME_LEVEL_EVENT_OVERLAY")
     self:SetSize(12, 12)
     self:EnableMouse()
     self:SetMouseMotionEnabled(true)
@@ -105,10 +116,19 @@ function RoutePinMixin:OnLoad()
     self.texture:SetAllPoints()
 end
 
-function RoutePinMixin:OnAcquired(variant, color, route)
+function RoutePinMixin:OnAcquired(variant, color, route, path, loop, lap)
     self.route = route
     self.variant = variant
+    self.path = path
+    self.loop = loop
+    self.lap = lap
     self.texture:SetVertexColor(color.r, color.g, color.b, color.a or 1)
+    -- This is below normal handynotes pins; loops go one level up so they can be clicked
+    if ns.CLASSIC then
+        self:UseFrameLevelType("PIN_FRAME_LEVEL_MAP_LINK")
+    else
+        self:UseFrameLevelType(loop and "PIN_FRAME_LEVEL_GARRISON_PLOT" or "PIN_FRAME_LEVEL_EVENT_OVERLAY")
+    end
 end
 
 function RoutePinMixin:OnMouseEnter()
@@ -118,9 +138,17 @@ function RoutePinMixin:OnMouseEnter()
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     end
     local color = COLORS[self.variant]
-    GameTooltip:AddDoubleLine("Route", self.variant, 1, 1, 1, color.r, color.g, color.b)
-    GameTooltip:AddDoubleLine(" ", ("%d points"):format(#self.route[self.variant]))
+    if self.loop then
+        GameTooltip:AddDoubleLine("Route", "repeated loop", 1, 1, 1, color.r, color.g, color.b)
+        GameTooltip:AddDoubleLine(" ", ("lap %d of %d"):format(self.lap, #self.loop.laps - 1))
+    else
+        GameTooltip:AddDoubleLine("Route", self.variant, 1, 1, 1, color.r, color.g, color.b)
+    end
+    GameTooltip:AddDoubleLine(" ", ("%d points"):format(#self.path))
     GameTooltip:AddDoubleLine(" ", ns:GetCoord(self.normalizedX, self.normalizedY))
+    if self.loop then
+        GameTooltip:AddLine("Click to remove the repeated laps", 0, 1, 0)
+    end
     GameTooltip:Show()
 end
 
@@ -130,7 +158,15 @@ end
 
 function RoutePinMixin:OnMouseUp(button)
     if button == "RightButton" then
-        ns:ShowConfigMenu(self.route)
+        ns:ShowConfigMenu(self.route, self.loop, self.lap)
+    end
+end
+
+function RoutePinMixin:OnClick(button)
+    if button == "LeftButton" and self.loop then
+        GameTooltip:Hide()
+        self.loop.removed = true
+        ns:RefreshRoute(self.route)
     end
 end
 

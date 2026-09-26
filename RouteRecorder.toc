@@ -25,5 +25,6 @@
 embeds.xml
 
 addon.lua
+loops.lua
 map.lua
 window.lua

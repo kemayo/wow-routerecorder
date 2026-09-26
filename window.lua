@@ -5,7 +5,7 @@ local myfullname = C_AddOns.GetAddOnMetadata(myname, "Title")
 
 local WINDOW_WIDTH = 300
 local COLLAPSED_HEIGHT = 92
-local EXPANDED_HEIGHT = 300
+local EXPANDED_HEIGHT = 314 -- room for a second summary line
 local COORD_LIST_HEIGHT = 110
 
 local Window = CreateFrame("Frame", "RouteRecorderWindow", UIParent, "BasicFrameTemplateWithInset")
@@ -102,10 +102,20 @@ end
 local selectedroute
 local function RefreshRouteDisplay()
     if not selectedroute then return end
-    local distance = ns:MeasureRoute(selectedroute.raw, selectedroute.mapID)
-    SummaryText:SetText(("%d raw points, %d straightened  \194\183  %d yards  \194\183  %s"):format(
-        #selectedroute.raw, #selectedroute.straight, distance, FormatDuration(selectedroute.stop - selectedroute.start)
-    ))
+    local path = ns:GetPrunedPath(selectedroute)
+    local distance = ns:MeasureRoute(path, selectedroute.mapID)
+    local summary = ("%d raw points, %d straightened  \194\183  %d yards  \194\183  %s"):format(
+        #path, #selectedroute.straight, distance, FormatDuration(selectedroute.stop - selectedroute.start)
+    )
+    local loops = selectedroute.loops and #selectedroute.loops or 0
+    if loops > 0 then
+        local removed = 0
+        for _, loop in ipairs(selectedroute.loops) do
+            if loop.removed then removed = removed + 1 end
+        end
+        summary = summary .. ("\n%d repeated %s, %d removed (orange on the map)"):format(loops, loops == 1 and "loop" or "loops", removed)
+    end
+    SummaryText:SetText(summary)
 
     local lines = {}
     for i, position in ipairs(selectedroute.straight) do
@@ -168,11 +178,9 @@ end)
 StraightenButton:SetScript("OnClick", function()
     if not selectedroute then return end
     local epsilon = tonumber(EpsilonBox:GetText()) or ns.DEFAULT_EPSILON
-    selectedroute.straight = ns:StraightenRoute(selectedroute.raw, epsilon)
     selectedroute.epsilon = epsilon
     EpsilonBox:SetText(ns.epsilonToString(epsilon))
-    RefreshRouteDisplay()
-    ns.RouteWorldMapDataProvider:RefreshAllData()
+    ns:RefreshRoute(selectedroute)
 end)
 
 CopyButton:SetScript("OnClick", function()
@@ -193,6 +201,12 @@ ns:RegisterCallback("OnRouteStopped", function(self, route)
     EpsilonBox:SetText(ns.epsilonToString(route.epsilon))
     SyncState()
     Window:Show()
+end)
+
+ns:RegisterCallback("OnRouteChanged", function(self, route)
+    if route == selectedroute then
+        RefreshRouteDisplay()
+    end
 end)
 
 function ns:ToggleWindow()

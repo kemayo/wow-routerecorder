@@ -15,7 +15,7 @@ Callbacks:Hide()
 ns.Callbacks = Callbacks
 
 Callbacks:GenerateCallbackEvents{
-    "OnRouteStarted", "OnRouteStopped",
+    "OnRouteStarted", "OnRouteStopped", "OnRouteChanged",
 }
 ns.Event = Callbacks.Event
 
@@ -48,6 +48,7 @@ ns:RegisterCallback("ADDON_LOADED", function(self, event, name)
             interval = 1,
             map_raw = false,
             map_straight = true,
+            map_loops = true,
             -- routes = {},
         },
     })
@@ -110,6 +111,7 @@ function ns:StopRoute(...)
 
     local route = self.route
     route.stop = time()
+    route.loops = self:FindRepeatedLoops(route.raw, route.mapID)
     route.straight = self:StraightenRoute(route.raw, ns.DEFAULT_EPSILON)
     route.epsilon = ns.DEFAULT_EPSILON
     ns.route = nil
@@ -179,13 +181,21 @@ function ns:StraightenRoute(raw, epsilon)
     return straight
 end
 
+-- Call after changing a route's epsilon or which of its loops are removed
+function ns:RefreshRoute(route)
+    route.straight = self:StraightenRoute(self:GetPrunedPath(route), route.epsilon)
+    self.RouteWorldMapDataProvider:RefreshAllData()
+    self:TriggerEvent("OnRouteChanged", route)
+end
+
 function ns:ShowRouteToCopy(route)
     local function coordify(position)
         return self:GetCoord(position:GetXY())
     end
+    local path = self:GetPrunedPath(route)
     self:ClearText()
-    self:ShowTextToCopy(("%d (%d) points; %d yards traveled; %d seconds"):format(#route.straight, #route.raw, self:MeasureRoute(route.raw, route.mapID), route.stop - route.start))
-    self:ShowTextToCopy("Raw coords", unpack(TableUtil.Transform(route.raw, coordify)))
+    self:ShowTextToCopy(("%d (%d) points; %d yards traveled; %d seconds"):format(#route.straight, #path, self:MeasureRoute(path, route.mapID), route.stop - route.start))
+    self:ShowTextToCopy(path == route.raw and "Raw coords" or "Raw coords (repeated loops removed)", unpack(TableUtil.Transform(path, coordify)))
     self:ShowTextToCopy("Straightened coords", unpack(TableUtil.Transform(route.straight, coordify)))
 end
 
@@ -194,13 +204,15 @@ _G.RouteRecorder_Straighten = function(coords, epsilon)
         return CreateVector2D(ns:GetXY(coord))
     end)
     local straight = ns:StraightenRoute(raw, epsilon)
+    local mapID = C_Map.GetBestMapForUnit("player")
     local route = {
         raw = raw,
         straight = straight,
+        loops = ns:FindRepeatedLoops(raw, mapID),
         epsilon = epsilon,
         start = time(),
         stop = time(),
-        mapID = C_Map.GetBestMapForUnit("player"),
+        mapID = mapID,
     }
     ns:ShowRouteToCopy(route)
     table.insert(ns.routes, route)
@@ -258,7 +270,15 @@ function ns.epsilonToString(x)
     return s
 end
 
-function ns:ShowConfigMenu(route)
+local function SetLoopsRemoved(route, removed)
+    for _, loop in ipairs(route.loops) do
+        loop.removed = removed
+    end
+    ns:RefreshRoute(route)
+end
+
+-- loop and lap are set when the menu is opened from a repeated lap on the map
+function ns:ShowConfigMenu(route, loop, lap)
     local function makeRadios(key, description, ...)
         local isSelected = function(val) return db[key] == val end
         local setSelected = function(val)
@@ -281,17 +301,33 @@ function ns:ShowConfigMenu(route)
         rootDescription:SetTag("MENU_RANGERECORDER_CONTEXT")
         rootDescription:CreateTitle(myfullname)
 
+        if loop then
+            rootDescription:CreateButton("Remove repeated laps", function()
+                loop.removed = true
+                ns:RefreshRoute(route)
+            end)
+            rootDescription:CreateButton("Keep this lap instead", function()
+                loop.keep = lap
+                ns:RefreshRoute(route)
+            end)
+            rootDescription:CreateDivider()
+        end
         if route then
             rootDescription:CreateButton("Delete Route", function()
                 tDeleteItem(ns.routes, route)
                 ns.RouteWorldMapDataProvider:RefreshAllData()
             end)
+            if route.loops and #route.loops > 0 then
+                rootDescription:CreateButton("Remove all repeated loops", function() SetLoopsRemoved(route, true) end)
+                rootDescription:CreateButton("Restore removed loops", function() SetLoopsRemoved(route, false) end)
+            end
             rootDescription:CreateDivider()
         end
 
         local map = rootDescription:CreateButton("On map...")
         map:CreateCheckbox("Raw points", checkIsSelected, checkSetSelected, "map_raw")
         map:CreateCheckbox("Straightened points", checkIsSelected, checkSetSelected, "map_straight")
+        map:CreateCheckbox("Repeated loops", checkIsSelected, checkSetSelected, "map_loops")
 
         makeRadios("threshold",
             rootDescription:CreateButton("Threshold"),

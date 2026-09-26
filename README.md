@@ -6,4 +6,6 @@ Click the icon in the addon compartment to open the recorder window, which has b
 
 Routes from the current session will appear on your world map.
 
+If the route went round the same loop more than once in a row, the extra laps show in orange on the map. Click one to cut the repeats and keep a single lap, or right-click it to keep that lap instead. The route's right-click menu can remove or restore all of them. The laps don't have to match exactly, so this also works for a route you walked yourself.
+
 I use this to work on my HandyNotes plugins, because eyeballing coordinates on the world map is a pain.
